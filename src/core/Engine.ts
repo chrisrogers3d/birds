@@ -16,6 +16,8 @@ export class Engine {
   readonly playerRig: THREE.Group;
   readonly clock = new THREE.Clock();
   readonly loop: Loop;
+  /** The current frame's XRFrame inside an immersive session, else null. */
+  currentXRFrame: XRFrame | null = null;
 
   constructor(
     private readonly container: HTMLElement,
@@ -65,7 +67,8 @@ export class Engine {
 
   /** Start the render/update loop. Uses setAnimationLoop (XR-safe). */
   start(): void {
-    this.renderer.setAnimationLoop((time: number) => {
+    this.renderer.setAnimationLoop((time: number, frame?: XRFrame) => {
+      this.currentXRFrame = frame ?? null;
       this.loop.tick(time / 1000);
       this.renderer.render(this.scene, this.camera);
     });

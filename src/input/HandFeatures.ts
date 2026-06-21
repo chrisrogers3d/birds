@@ -52,37 +52,61 @@ function fingerCurl(mcp: LM, pip: LM, tip: LM): number {
   return clamp01((1 - cos) / 2);
 }
 
-export function computeMediaPipeFeatures(world: LM[]): HandFeatures {
-  const W = world[0];
-  const idxMcp = world[5];
-  const midMcp = world[9];
-  const pinkyMcp = world[17];
-  const palmWidth = len(sub(idxMcp, pinkyMcp)) || 1e-6;
+/** The landmarks the feature math needs, in any coordinate frame. */
+export interface Anatomy {
+  wrist: LM;
+  thumbTip: LM;
+  idxMcp: LM;
+  idxPip: LM;
+  idxTip: LM;
+  midMcp: LM;
+  midPip: LM;
+  midTip: LM;
+  ringMcp: LM;
+  ringPip: LM;
+  ringTip: LM;
+  pinkyMcp: LM;
+  pinkyPip: LM;
+  pinkyTip: LM;
+}
 
-  // Curl: average of the four non-thumb fingers, remapped to use the full range.
+/**
+ * Shared feature core. `upSign` accounts for the source's vertical axis:
+ * MediaPipe world landmarks are y-down (upSign = -1); WebXR/three are y-up (+1).
+ */
+export function featuresFromAnatomy(a: Anatomy, upSign: number): HandFeatures {
+  const palmWidth = len(sub(a.idxMcp, a.pinkyMcp)) || 1e-6;
+
   const rawCurl =
-    (fingerCurl(world[5], world[6], world[8]) +
-      fingerCurl(world[9], world[10], world[12]) +
-      fingerCurl(world[13], world[14], world[16]) +
-      fingerCurl(world[17], world[18], world[20])) /
+    (fingerCurl(a.idxMcp, a.idxPip, a.idxTip) +
+      fingerCurl(a.midMcp, a.midPip, a.midTip) +
+      fingerCurl(a.ringMcp, a.ringPip, a.ringTip) +
+      fingerCurl(a.pinkyMcp, a.pinkyPip, a.pinkyTip)) /
     4;
   const curl = remap(rawCurl, TUNE.curlLo, TUNE.curlHi);
+  const spread = remap(len(sub(a.idxTip, a.pinkyTip)) / palmWidth, TUNE.spreadNarrow, TUNE.spreadWide);
+  const thumb = remap(len(sub(a.thumbTip, a.idxMcp)) / palmWidth, TUNE.thumbTucked, TUNE.thumbOut);
 
-  // Spread: index↔pinky fingertip distance relative to palm width.
-  const spread = remap(len(sub(world[8], world[20])) / palmWidth, TUNE.spreadNarrow, TUNE.spreadWide);
-
-  // Thumb abduction: thumbtip↔indexMCP distance relative to palm width.
-  const thumb = remap(len(sub(world[4], idxMcp)) / palmWidth, TUNE.thumbTucked, TUNE.thumbOut);
-
-  // Palm frame for pitch/roll.
-  const forward = norm(sub(midMcp, W)); // wrist -> fingers
-  const side = norm(sub(idxMcp, pinkyMcp)); // across palm
+  const forward = norm(sub(a.midMcp, a.wrist)); // wrist -> fingers
+  const side = norm(sub(a.idxMcp, a.pinkyMcp)); // across palm
   void cross; // (palm normal available if needed later)
 
-  // y is down: fingers tilted up -> forward.y negative -> positive pitch.
-  const pitch = clamp(-forward.y * TUNE.pitchGain, -1, 1);
-  // rolling the wrist tilts the across-palm vector vertically.
-  const roll = clamp(side.y * TUNE.rollGain, -1, 1);
+  // fingers tilted up -> positive pitch (sign depends on the source's up axis).
+  const pitch = clamp(upSign * forward.y * TUNE.pitchGain, -1, 1);
+  const roll = clamp(upSign * side.y * TUNE.rollGain, -1, 1);
 
   return { curl, spread, pitch, roll, thumb };
+}
+
+/** Adapter: MediaPipe 21 world landmarks -> Anatomy (y-down). */
+export function computeMediaPipeFeatures(world: LM[]): HandFeatures {
+  const a: Anatomy = {
+    wrist: world[0],
+    thumbTip: world[4],
+    idxMcp: world[5], idxPip: world[6], idxTip: world[8],
+    midMcp: world[9], midPip: world[10], midTip: world[12],
+    ringMcp: world[13], ringPip: world[14], ringTip: world[16],
+    pinkyMcp: world[17], pinkyPip: world[18], pinkyTip: world[20],
+  };
+  return featuresFromAnatomy(a, -1);
 }

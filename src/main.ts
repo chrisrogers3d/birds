@@ -7,6 +7,7 @@ import { Engine } from './core/Engine';
 import { createSettings } from './core/Settings';
 import { MockHandSource } from './input/MockHandSource';
 import { MediaPipeHandSource } from './input/MediaPipeHandSource';
+import { WebXRHandSource } from './input/WebXRHandSource';
 import type { HandSource } from './input/HandSource';
 import { TUNE } from './input/HandFeatures';
 import { Hud } from './util/Hud';
@@ -147,6 +148,24 @@ camBtn.addEventListener('click', async () => {
 });
 document.body.appendChild(camBtn);
 
+// On entering an immersive session, switch to native WebXR hand tracking; restore
+// the previous (mock/webcam) source on exit.
+let preXrSource: HandSource | null = null;
+engine.renderer.xr.addEventListener('sessionstart', () => {
+  preXrSource = activeSource;
+  const xr = new WebXRHandSource();
+  void xr.init();
+  activeSource = xr;
+  (window as unknown as { hands: HandSource }).hands = xr;
+});
+engine.renderer.xr.addEventListener('sessionend', () => {
+  if (preXrSource) {
+    activeSource = preXrSource;
+    (window as unknown as { hands: HandSource }).hands = preXrSource;
+    preXrSource = null;
+  }
+});
+
 // Flight integrates at the fixed timestep for stability.
 let lastLift = 0;
 engine.loop.onFixed((fdt) => {
@@ -171,7 +190,7 @@ engine.loop.onFrame((dt) => {
   const session = engine.renderer.xr.getSession();
   activeSource.update({
     dt,
-    frame: null,
+    frame: engine.currentXRFrame,
     referenceSpace: engine.renderer.xr.getReferenceSpace(),
     camera: engine.camera,
   });
