@@ -35,6 +35,16 @@ const GROUP_LENGTH: Record<GroupKey, number> = {
   Alula: 0.11,
 };
 
+/** Dorsal hawk tones: dark flight feathers grading to warmer coverts. */
+const GROUP_COLOR: Record<GroupKey, number> = {
+  Primaries: 0x33291f,
+  Secondaries: 0x4d3e2e,
+  PrimaryCoverts: 0x6a5641,
+  SecondaryCoverts: 0x73604a,
+  MedianCoverts: 0x8a745a,
+  Alula: 0x2c241b,
+};
+
 interface Feather {
   pivot: THREE.Object3D;
   /** base fan angle (radians, already signed for the wing side). */
@@ -51,25 +61,32 @@ export interface FeatherSystemOptions {
 export class FeatherSystem {
   private readonly feathers: Feather[] = [];
   private readonly card = makeFeatherCard();
-  private readonly material: THREE.Material;
+  private readonly materials = new Map<GroupKey, THREE.Material>();
   private readonly tmpEuler = new THREE.Euler();
 
   constructor(
     private readonly wing: WingRig,
     opts: FeatherSystemOptions = {},
   ) {
-    this.material = new THREE.MeshStandardMaterial({
-      color: 0x6b5642, // hawk brown; per-group/feather tint can come later
-      roughness: 0.78,
-      metalness: 0.0,
-      side: THREE.DoubleSide,
-    });
-
     (Object.keys(HAWK_GROUPS) as GroupKey[]).forEach((key) => {
       this.buildGroup(key, HAWK_GROUPS[key], opts.geometries?.[key]);
     });
 
     this.update(this.wing.getExtension());
+  }
+
+  private materialFor(key: GroupKey): THREE.Material {
+    let m = this.materials.get(key);
+    if (!m) {
+      m = new THREE.MeshStandardMaterial({
+        color: GROUP_COLOR[key],
+        roughness: 0.78,
+        metalness: 0.0,
+        side: THREE.DoubleSide,
+      });
+      this.materials.set(key, m);
+    }
+    return m;
   }
 
   private buildGroup(key: GroupKey, cfg: GroupConfig, geo?: THREE.BufferGeometry): void {
@@ -78,6 +95,7 @@ export class FeatherSystem {
     const boneLen = cfg.span === 'hand' ? BONE.hand : BONE.forearm;
     const geometry = geo ?? this.card;
     const length = GROUP_LENGTH[key];
+    const material = this.materialFor(key);
 
     for (let i = 1; i <= cfg.count; i++) {
       const tAlong = (i - 0.5) / cfg.count; // 0 innermost .. 1 outermost
@@ -91,7 +109,7 @@ export class FeatherSystem {
       // Base sits along the bone (+X local), lifted by the tract's layer height.
       pivot.position.set(s * boneLen * u, cfg.layer, 0);
 
-      const mesh = new THREE.Mesh(geometry, this.material);
+      const mesh = new THREE.Mesh(geometry, material);
       // Card: quill at origin, vane down +Z. Scale length (Z) and width (X).
       mesh.scale.set(sil.scaleWidth * length * 0.6, 1, sil.scaleLength * length);
       pivot.add(mesh);
@@ -127,6 +145,6 @@ export class FeatherSystem {
 
   dispose(): void {
     this.card.dispose();
-    this.material.dispose();
+    for (const m of this.materials.values()) m.dispose();
   }
 }
