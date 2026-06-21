@@ -1,0 +1,193 @@
+/**
+ * Bootstrap. Phase 1 grey-box: a lit scene with a ground grid and a placeholder
+ * bird so we can verify rendering + the loop + XR entry before the rig lands.
+ */
+import * as THREE from 'three';
+import { Engine } from './core/Engine';
+import { createSettings } from './core/Settings';
+import { MockHandSource } from './input/MockHandSource';
+import { MediaPipeHandSource } from './input/MediaPipeHandSource';
+import type { HandSource } from './input/HandSource';
+import { TUNE } from './input/HandFeatures';
+import { Hud } from './util/Hud';
+import { Bird } from './bird/Bird';
+import { applyHandToWing } from './bird/HandToWing';
+import { FlightModel, type FlightInput } from './flight/FlightModel';
+import { FollowCamera } from './core/FollowCamera';
+import type { HandState } from './input/HandSource';
+import { Heightfield } from './terrain/Heightfield';
+import { WindField } from './terrain/WindField';
+import { buildTerrain } from './terrain/Terrain';
+import { UpdraftVFX } from './vfx/UpdraftVFX';
+
+const container = document.getElementById('app')!;
+const settings = createSettings();
+const engine = new Engine(container, settings);
+const { scene } = engine;
+
+scene.background = new THREE.Color(0x88aadd);
+scene.fog = new THREE.Fog(0x88aadd, 50, 800);
+
+// --- Lighting (placeholder; replaced by Takram atmosphere in Phase 3) ---
+const hemi = new THREE.HemisphereLight(0xbfdfff, 0x586048, 1.0);
+scene.add(hemi);
+const sun = new THREE.DirectionalLight(0xfff2e0, 2.0);
+sun.position.set(40, 80, 20);
+scene.add(sun);
+
+// --- Terrain (procedural coastal cliff) + wind field ---
+const heightfield = new Heightfield();
+const windField = new WindField(heightfield);
+const terrain = buildTerrain(heightfield);
+scene.add(terrain);
+
+// --- Updraft VFX (rising columns where ridge lift is strong) ---
+const updraftVFX = settings.vfxDensity > 0 ? new UpdraftVFX(heightfield, windField, { density: settings.vfxDensity }) : null;
+if (updraftVFX) scene.add(updraftVFX.object);
+
+// --- Optional: Google Photorealistic 3D Tiles (?tiles=1, needs key) ---
+// Real terrain over Baker Beach / the Presidio bluffs. Opt-in; procedural cliff
+// stays the default. Dynamically imported so it doesn't bloat the base bundle.
+const tilesKey = import.meta.env.VITE_GOOGLE_TILES_KEY as string | undefined;
+let googleTiles: import('./terrain/GoogleTiles').GoogleTilesHandle | null = null;
+if (new URLSearchParams(location.search).has('tiles') && tilesKey) {
+  try {
+    const { createGoogleTiles } = await import('./terrain/GoogleTiles');
+    googleTiles = createGoogleTiles({
+      apiKey: tilesKey,
+      camera: engine.camera,
+      renderer: engine.renderer,
+      latDeg: 37.7936, // Baker Beach / Presidio bluffs
+      lonDeg: -122.4836,
+    });
+    scene.add(googleTiles.group);
+    terrain.visible = false; // hide the procedural stand-in
+    const credit = document.createElement('div');
+    Object.assign(credit.style, {
+      position: 'fixed', bottom: '4px', left: '8px', zIndex: '8',
+      font: '11px system-ui, sans-serif', color: '#dfe8f5',
+      textShadow: '0 1px 2px #000', pointerEvents: 'none',
+    } satisfies Partial<CSSStyleDeclaration>);
+    credit.textContent = 'Data © Google';
+    document.body.appendChild(credit);
+    window.addEventListener('resize', () => googleTiles?.onResize());
+    setInterval(() => { if (googleTiles) credit.textContent = googleTiles.attributions(); }, 1000);
+  } catch (err) {
+    console.error('[birds] Google tiles failed to load:', err);
+  }
+}
+
+// --- Bird with the wing rig + procedural feathers ---
+const bird = new Bird({ feathers: true, debugSkeleton: false });
+scene.add(bird.group);
+
+// --- Flight ---
+const flight = new FlightModel();
+// Start out over the cliff edge, flying +X along the ridge so the onshore wind
+// gives ridge lift to soar on.
+flight.position.set(-300, 95, -5);
+flight.yaw = -Math.PI / 2; // heading +X
+flight.speed = 18;
+const followCam = new FollowCamera();
+
+/** Aggregate both hands into a single flight input. */
+function flightInputFrom(state: HandState): FlightInput {
+  const l = state.left.features;
+  const r = state.right.features;
+  return {
+    aoa: 0.5 * (l.pitch + r.pitch),
+    bank: 0.5 * (l.roll + r.roll),
+    extension: 1 - 0.5 * (l.curl + r.curl),
+  };
+}
+
+// --- Hand input + debug HUD ---
+// Start with the keyboard mock; swap to webcam (MediaPipe) on user request.
+let activeSource: HandSource = new MockHandSource();
+const hud = new Hud(settings.debugHud);
+await activeSource.init();
+(window as unknown as { hands: HandSource }).hands = activeSource;
+
+const camBtn = document.createElement('button');
+camBtn.textContent = '🎥 Enable webcam hands';
+Object.assign(camBtn.style, {
+  position: 'fixed',
+  top: '8px',
+  right: '8px',
+  zIndex: '11',
+  padding: '8px 12px',
+  font: '13px ui-sans-serif, system-ui, sans-serif',
+  color: '#cfe6ff',
+  background: 'rgba(20,30,45,0.85)',
+  border: '1px solid rgba(120,160,210,0.4)',
+  borderRadius: '6px',
+  cursor: 'pointer',
+} satisfies Partial<CSSStyleDeclaration>);
+camBtn.addEventListener('click', async () => {
+  camBtn.disabled = true;
+  camBtn.textContent = '🎥 starting…';
+  try {
+    const mp = new MediaPipeHandSource({ preview: true });
+    await mp.init();
+    const old = activeSource;
+    activeSource = mp;
+    (window as unknown as { hands: HandSource }).hands = mp;
+    old.dispose();
+    camBtn.textContent = '🎥 webcam active';
+  } catch (err) {
+    console.error('[birds] webcam hands failed:', err);
+    camBtn.textContent = '🎥 webcam failed — using keyboard';
+    camBtn.disabled = false;
+  }
+});
+document.body.appendChild(camBtn);
+
+// Flight integrates at the fixed timestep for stability.
+let lastLift = 0;
+engine.loop.onFixed((fdt) => {
+  const input = flightInputFrom(activeSource.state);
+  const p = flight.position;
+  lastLift = windField.liftAt(p.x, p.y, p.z);
+  const groundY = heightfield.height(p.x, p.z);
+  flight.update(fdt, input, lastLift, groundY);
+});
+
+let elapsed = 0;
+engine.loop.onFrame((dt) => {
+  elapsed += dt;
+  updraftVFX?.update(elapsed);
+  googleTiles?.update();
+  const session = engine.renderer.xr.getSession();
+  activeSource.update({
+    dt,
+    frame: null,
+    referenceSpace: engine.renderer.xr.getReferenceSpace(),
+    camera: engine.camera,
+  });
+  // Full hand -> wing mapping: each hand shapes its wing (fold/AoA/bank/fan/alula).
+  applyHandToWing(bird, activeSource.state);
+  // Place the bird from the flight state; chase it (flat mode only).
+  flight.applyTo(bird.group);
+  if (!session) followCam.update(dt, bird.group, engine.camera);
+
+  const agl = flight.position.y - heightfield.height(flight.position.x, flight.position.z);
+  hud.set('src', activeSource.name);
+  hud.set('plat', `${settings.platform} / ${settings.tier}`);
+  hud.set('spd', `${flight.speed.toFixed(1)} m/s`);
+  hud.set('alt', `${flight.position.y.toFixed(0)} m (agl ${agl.toFixed(0)})`);
+  hud.set('lift', `${lastLift >= 0 ? '+' : ''}${lastLift.toFixed(1)} m/s`);
+  hud.update(activeSource.state);
+});
+
+engine.start();
+
+// Expose for quick console poking during dev.
+(window as unknown as { engine: Engine; bird: Bird; flight: FlightModel }).engine = engine;
+(window as unknown as { engine: Engine; bird: Bird; flight: FlightModel }).bird = bird;
+(window as unknown as { engine: Engine; bird: Bird; flight: FlightModel }).flight = flight;
+// window.hands is set above and updated when the webcam source is enabled.
+// Live-tunable from the console, e.g. window.TUNE.curlHi = 0.5
+(window as unknown as { TUNE: typeof TUNE }).TUNE = TUNE;
+
+// eslint-disable-next-line no-console
+console.log(`[birds] platform=${settings.platform} tier=${settings.tier}`);
