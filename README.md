@@ -88,13 +88,27 @@ folding to dive trades height for speed. The `UpdraftVFX` columns mark the band.
 `.ma` and rebuilt the authentic feather meshes into
 `public/models/hawk_feathers.glb` (a drop-in for the procedural cards).
 
+## Wing fold (hand-animatable)
+
+The wing fold is driven by a Blender-authored animation, not hardcoded poses.
+`blender/hawk_rig.blend` holds the hawk armature with a spread→folded keyframed
+clip, exported to `public/models/hawk_rig.glb`. At runtime each hand's openness
+scrubs the clip for that wing, and the procedural feathers ride the animated
+bones. **To refine the fold**, edit the keyframes in the `.blend` and re-export
+the glb — no code changes needed.
+
 ## Roadmap
 
 - Takram `@takram/three-atmosphere` sky + aerial perspective (toggleable for perf)
-- Wing-airflow / tip-vortex VFX
-- WebXR (Quest 3) native hand source
 - Real-terrain lift: raycast the Google tiles into the Heightfield
-- Hawk feather textures / barred underwing; swap in `hawk_feathers.glb`
+- Hawk feather textures / barred underwing
+- Per-hand asymmetric flap animation; calibrate hand-feature thresholds on-device
+- Skinned wing membrane (optional, higher fidelity than instanced feathers)
+
+Done so far: bird rig + procedural feathers + tail; keyboard / MediaPipe webcam /
+native WebXR hands; full hand→wing mapping; arcade flight + chase cam + respawn;
+procedural cliff + ridge lift + thermals; updraft & wing-airflow VFX; gradient
+sky dome; Google 3D Tiles (opt-in); hand-animatable Blender fold.
 
 ## Credits & license
 
