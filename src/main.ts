@@ -19,6 +19,7 @@ import { Heightfield } from './terrain/Heightfield';
 import { WindField } from './terrain/WindField';
 import { buildTerrain } from './terrain/Terrain';
 import { UpdraftVFX } from './vfx/UpdraftVFX';
+import { WingAirflowVFX } from './vfx/WingAirflowVFX';
 
 const container = document.getElementById('app')!;
 const settings = createSettings();
@@ -80,6 +81,10 @@ if (new URLSearchParams(location.search).has('tiles') && tilesKey) {
 // --- Bird with the wing rig + procedural feathers ---
 const bird = new Bird({ feathers: true, debugSkeleton: false });
 scene.add(bird.group);
+
+// Airflow streaming over the wings (child of the bird, so it moves with it).
+const wingAirflow = settings.vfxDensity > 0 ? new WingAirflowVFX({ density: settings.vfxDensity }) : null;
+if (wingAirflow) bird.group.add(wingAirflow.object);
 
 // --- Flight ---
 const flight = new FlightModel();
@@ -157,6 +162,12 @@ engine.loop.onFrame((dt) => {
   elapsed += dt;
   updraftVFX?.update(elapsed);
   googleTiles?.update();
+  if (wingAirflow) {
+    const ext = 0.5 * (bird.leftWing.getExtension() + bird.rightWing.getExtension());
+    // Visible from normal soaring speed (~8) and saturating in a fast dive (~18).
+    const sp01 = THREE.MathUtils.clamp((flight.speed - 4) / 12, 0.12, 1);
+    wingAirflow.update(elapsed, sp01, ext);
+  }
   const session = engine.renderer.xr.getSession();
   activeSource.update({
     dt,
