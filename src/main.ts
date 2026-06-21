@@ -176,13 +176,30 @@ engine.renderer.xr.addEventListener('sessionend', () => {
 });
 
 // Flight integrates at the fixed timestep for stability.
+const START = { pos: new THREE.Vector3(-300, 95, -5), yaw: -Math.PI / 2, speed: 18 };
+function respawn(): void {
+  flight.position.copy(START.pos);
+  flight.yaw = START.yaw;
+  flight.speed = START.speed;
+  flight.pitch = 0;
+  flight.roll = 0;
+}
 let lastLift = 0;
+let respawns = 0;
 engine.loop.onFixed((fdt) => {
   const input = flightInputFrom(activeSource.state);
   const p = flight.position;
   lastLift = windField.liftAt(p.x, p.y, p.z);
   const groundY = heightfield.height(p.x, p.z);
   flight.update(fdt, input, lastLift, groundY);
+
+  // Soft respawn: landed (touched down) or flew past the terrain bounds.
+  const agl = p.y - groundY;
+  const farXZ = Math.hypot(p.x, p.z);
+  if (agl < 2 || farXZ > 1250) {
+    respawn();
+    respawns++;
+  }
 });
 
 let elapsed = 0;
@@ -215,6 +232,7 @@ engine.loop.onFrame((dt) => {
   hud.set('spd', `${flight.speed.toFixed(1)} m/s`);
   hud.set('alt', `${flight.position.y.toFixed(0)} m (agl ${agl.toFixed(0)})`);
   hud.set('lift', `${lastLift >= 0 ? '+' : ''}${lastLift.toFixed(1)} m/s`);
+  if (respawns > 0) hud.set('resets', `${respawns}`);
   hud.update(activeSource.state);
 });
 
