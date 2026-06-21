@@ -1479,51 +1479,51 @@ def existanceCheck():
 	#check to see if all the feathers exist
 	if (m.objExists('R_Primaries_Base') == 0): 
 		exists = 0
-		print "R Primary missing"	
+		print("R Primary missing")
 	
 	if (m.objExists('L_Primaries_Base') == 0): 
 		exists = 0
-		print "L Primary missing"
+		print("L Primary missing")
 
 	if (m.objExists('L_PrimaryCoverts_Base') == 0): 
 		exists = 0
-		print "L Primary Covert missing"
+		print("L Primary Covert missing")
 		
 	if (m.objExists('R_PrimaryCoverts_Base') == 0): 
 		exists = 0
-		print "R Primary Covert missing"
+		print("R Primary Covert missing")
 		
 	if (m.objExists('R_Secondaries_Base') == 0): 
 		exists = 0
-		print "R Secondary missing"
+		print("R Secondary missing")
 		
 	if (m.objExists('L_Secondaries_Base') == 0): 
 		exists = 0
-		print "L Secondary missing"
+		print("L Secondary missing")
 		
 	if (m.objExists('R_SecondaryCoverts_Base') == 0): 
 		exists = 0
-		print "R Secondary Coverts missing"
+		print("R Secondary Coverts missing")
 		
 	if (m.objExists('L_SecondaryCoverts_Base') == 0): 
 		exists = 0
-		print "L Secondary Coverts missing"		
+		print("L Secondary Coverts missing")
 		
 	if (m.objExists('R_MedianCoverts_Base') == 0): 
 		exists = 0
-		print "R Median Coverts missing"
+		print("R Median Coverts missing")
 		
 	if (m.objExists('L_MedianCoverts_Base') == 0): 
 		exists = 0
-		print "L Median Coverts missing"			
+		print("L Median Coverts missing")
 
 	if (m.objExists('R_Alula_Base') == 0): 
 		exists = 0
-		print "R Alula missing"
+		print("R Alula missing")
 		
 	if (m.objExists('L_Alula_Base') == 0): 
 		exists = 0
-		print "L Alula missing"		
+		print("L Alula missing")
 		
 	#if (m.objExists('Tertial_Base') == 0): 
 	#	exists = 0
@@ -1534,7 +1534,7 @@ def existanceCheck():
 	while (i < 5):
 		if (m.objExists(side + '_Wing_' + repr(i)) ==0): 
 			exists = 0
-			print side + '_Wing_' + repr(i) + " missing"		
+			print(side + '_Wing_' + repr(i) + " missing")
 		
 		i = i+1
 
@@ -1547,23 +1547,23 @@ def checkUserInput():
 
 	if (numPrimaries < 3):
 		userInputCheck = 0
-		print "Too few Primaries"
+		print("Too few Primaries")
 
 	if (numSecondaries < 3):
 		userInputCheck = 0
-		print "Too few Secondaries"
+		print("Too few Secondaries")
 
 	if (numPrimaryCoverts < 3):
 		userInputCheck = 0
-		print "Too few Primary Coverts"
+		print("Too few Primary Coverts")
 
 	if (numSecondaryCoverts < 3):
 		userInputCheck = 0
-		print "Too few Secondary Coverts"
+		print("Too few Secondary Coverts")
 
 	if (numMedianCoverts < 3):
 		userInputCheck = 0
-		print "Too few Secondary Coverts"
+		print("Too few Secondary Coverts")
 
 #Function to check if a given value is a number or a string		
 def checkNumerical(valueToCheck):
@@ -1810,7 +1810,7 @@ class ui():
 		self.setWingType()
 		
 		if self.setFields() == 0:
-			print "Generate feathers aborted, check script editor for details."
+			print("Generate feathers aborted, check script editor for details.")
 		elif self.setFields()==1:
 			generateFeathers()
   
@@ -1871,15 +1871,15 @@ class ui():
 		
 		#Check to make sure values are actual numbers and not something invalid (a string)
 		if checkNumerical(numPrimaries) == 0:        
-			print 'Primaries must be a numerical value, strings not allowed.'        
+			print('Primaries must be a numerical value, strings not allowed.')
 		elif checkNumerical(numSecondaries) == 0:        
-			print 'Secondaries must be a numerical value, strings not allowed.'        
+			print('Secondaries must be a numerical value, strings not allowed.')
 		elif checkNumerical(numPrimaryCoverts) == 0:        
-			print 'Primary Coverts must be a numerical value, strings not allowed.'        
+			print('Primary Coverts must be a numerical value, strings not allowed.')
 		elif checkNumerical(numSecondaryCoverts) == 0:        
-			print 'Secondary Coverts must be a numerical value, strings not allowed.'        
+			print('Secondary Coverts must be a numerical value, strings not allowed.')
 		elif checkNumerical(numMedianCoverts) == 0:        
-			print 'Median Coverts must be a numerical value, strings not allowed.'          
+			print('Median Coverts must be a numerical value, strings not allowed.')
 		else:
 			#If they're correct, cast them to floats
 			numPrimaries = float(numPrimaries)
@@ -1903,12 +1903,12 @@ def generateFeathers():
 			if (userInputCheck == 1):
 				#check to see if startup function has been run by checking the existance of the controls group
 				if m.objExists('Controls'): 
-					print "Startup already run. Skipping."
+					print("Startup already run. Skipping.")
 				else:
 					runAtStartup()
-					print "Startup complete."
+					print("Startup complete.")
 
-				print "All parts accounted for, generating feathers."
+				print("All parts accounted for, generating feathers.")
 				
 				#set the locators for the joint positions
 				setLocators()
@@ -1921,9 +1921,9 @@ def generateFeathers():
 				my_wing.buildFeathers("_MedianCoverts_", numMedianCoverts, 13.0, Loc3Coord, Loc2Coord)
 				my_wing.buildFeathers("_Alula_", numAlulas, 4.0, Loc4Coord, Loc3Coord)			
 		else:
-			print "Cannot generate feathers: Missing integral parts. Check Script Editor for details."
+			print("Cannot generate feathers: Missing integral parts. Check Script Editor for details.")
 	else:
-		print "Feathers have already been generated for this side."
+		print("Feathers have already been generated for this side.")
 		
 #GUI button function 2
 #Call the generation functions when the button to generate the motion system is pressed	
@@ -1950,24 +1950,24 @@ def generateMotionSys():
 				#Create blendshape controls on the primary feathers
 				makeBlends('_Primaries_', numPrimaries) 
 				blendshapeSys('_Primaries_', numPrimaries, '_Tip_Flex_Feathers', '_Mid_L_Flex_Feathers')
-				print side + " Primary flex Added."
+				print(side + " Primary flex Added.")
 			else:
-				print side + " Primary Blendshape missing. Didn't add primary feather flex."
+				print(side + " Primary Blendshape missing. Didn't add primary feather flex.")
 	
 			if  (m.objExists(side + '_Secondaries_BLND')):	
 				#Create blendshape controls on the secondary feathers
 				makeBlends('_Secondaries_', numSecondaries)
 				blendshapeSys('_Secondaries_', numSecondaries, '_End_Flex_Feathers', '_Mid_R_Flex_Feathers')
-				print side + " Secondary flex Added."
+				print(side + " Secondary flex Added.")
 			else:
-				print side + " Secondary Blendshape missing. Didn't add secondary feather flex."
+				print(side + " Secondary Blendshape missing. Didn't add secondary feather flex.")
 	
 			foldControls() #Create controls for wingfolding
 
 			cleanup() #Run cleanup
-			print side + " Motion system generated."
-		else: print "Motion system already created for this side."
-	else: print "Cannot generate motion system without feathers. Please generate feathers first."
+			print(side + " Motion system generated.")
+		else: print("Motion system already created for this side.")
+	else: print("Cannot generate motion system without feathers. Please generate feathers first.")
 		
 #Main function call to start the program
 def wingCreator():

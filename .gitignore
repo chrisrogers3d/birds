@@ -16,3 +16,12 @@ Thumbs.db
 
 # Keep the reference material but not the zip
 wing_creator_maya.zip
+
+# Maya working files (keep base .ma; ignore increments, baked, swatches)
+.mayaSwatches/
+*.[0-9][0-9][0-9][0-9].ma
+*.baked.*.ma
+
+# Large model exports — we consume GLB, FBX is reference only
+*.fbx
+*.FBX
