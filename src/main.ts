@@ -22,21 +22,26 @@ import { WindField } from './terrain/WindField';
 import { buildTerrain } from './terrain/Terrain';
 import { UpdraftVFX } from './vfx/UpdraftVFX';
 import { WingAirflowVFX } from './vfx/WingAirflowVFX';
+import { createSkyDome } from './sky/SkyDome';
 
 const container = document.getElementById('app')!;
 const settings = createSettings();
 const engine = new Engine(container, settings);
 const { scene } = engine;
 
-scene.background = new THREE.Color(0x88aadd);
-scene.fog = new THREE.Fog(0x88aadd, 50, 800);
+// Distance haze blends terrain into the horizon (color matches the sky dome).
+scene.fog = new THREE.Fog(0xcfdcea, 400, 4500);
 
-// --- Lighting (placeholder; replaced by Takram atmosphere in Phase 3) ---
+// --- Lighting (cheap default; Takram atmosphere is the high-end toggle) ---
 const hemi = new THREE.HemisphereLight(0xbfdfff, 0x586048, 1.0);
 scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2e0, 2.0);
 sun.position.set(40, 80, 20);
 scene.add(sun);
+
+// --- Sky dome (gradient + sun); follows the camera so it's always around you ---
+const sky = createSkyDome({ sunDirection: sun.position.clone() });
+scene.add(sky);
 
 // --- Terrain (procedural coastal cliff) + wind field ---
 const heightfield = new Heightfield();
@@ -205,6 +210,7 @@ engine.loop.onFixed((fdt) => {
 let elapsed = 0;
 engine.loop.onFrame((dt) => {
   elapsed += dt;
+  sky.position.copy(engine.camera.position); // keep the dome centered on the viewer
   updraftVFX?.update(elapsed);
   googleTiles?.update();
   if (wingAirflow) {
