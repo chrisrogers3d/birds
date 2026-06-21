@@ -11,6 +11,14 @@
 import * as THREE from 'three';
 import type { Heightfield } from './Heightfield';
 
+/** A column of rising air away from the ridge (placed by hand for art control). */
+export interface Thermal {
+  x: number;
+  z: number;
+  radius: number;
+  strength: number; // peak vertical speed (m/s) at the core
+}
+
 export class WindField {
   /** Steady onshore wind (m/s): blowing +Z, in from the sea. */
   readonly wind = new THREE.Vector3(0, 0, 14);
@@ -18,20 +26,41 @@ export class WindField {
   liftGain = 0.26;
   /** Lift decays over this height above the terrain (m). */
   liftDepth = 140;
-  /** Hard cap on updraft (m/s). */
-  maxLift = 6;
+  /** Hard cap on total updraft (m/s). */
+  maxLift = 7;
+  /** Thermals decay over this height (m); they reach higher than ridge lift. */
+  thermalDepth = 320;
+
+  /** Hand-placed thermal hotspots over the plateau / inland. */
+  readonly thermals: Thermal[] = [
+    { x: 220, z: 150, radius: 90, strength: 4.0 },
+    { x: -180, z: 230, radius: 80, strength: 3.5 },
+    { x: 40, z: 360, radius: 110, strength: 4.5 },
+    { x: 380, z: 280, radius: 75, strength: 3.0 },
+  ];
 
   constructor(private readonly hf: Heightfield) {}
 
-  /** Vertical air speed (m/s, ≥0) at a world point. */
+  /** Vertical air speed (m/s, ≥0) at a world point: ridge lift + thermals. */
   liftAt(x: number, y: number, z: number): number {
     const s = this.hf.sample(x, z);
     const above = y - s.height;
     if (above < 0) return 0;
+
+    let lift = 0;
     const upslope = this.wind.x * s.gradX + this.wind.z * s.gradZ;
-    if (upslope <= 0) return 0; // lee side / flat: no ridge lift
-    const decay = Math.exp(-above / this.liftDepth);
-    return Math.min(this.maxLift, upslope * this.liftGain * decay);
+    if (upslope > 0) lift += upslope * this.liftGain * Math.exp(-above / this.liftDepth);
+
+    for (const t of this.thermals) {
+      const dx = x - t.x;
+      const dz = z - t.z;
+      const d2 = dx * dx + dz * dz;
+      const r2 = t.radius * t.radius;
+      if (d2 >= r2) continue;
+      const fall = 1 - d2 / r2; // smooth radial falloff
+      lift += t.strength * fall * fall * Math.exp(-above / this.thermalDepth);
+    }
+    return Math.min(this.maxLift, lift);
   }
 
   /** Full air-velocity vector at a point (horizontal wind + ridge lift). */
