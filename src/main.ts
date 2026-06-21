@@ -94,7 +94,16 @@ try {
 } catch (err) {
   console.warn('[birds] feather glb failed, using procedural cards:', err);
 }
-const bird = new Bird({ feathers: true, debugSkeleton: false, featherGeometries });
+// Hand-animated fold rig (Blender). Falls back to the procedural WingRig fold.
+let rig;
+try {
+  const { GLTFLoader } = await import('three/addons/loaders/GLTFLoader.js');
+  const gltf = await new GLTFLoader().loadAsync('/models/hawk_rig.glb');
+  if (gltf.animations.length) rig = { scene: gltf.scene, clip: gltf.animations[0] };
+} catch (err) {
+  console.warn('[birds] fold rig failed, using procedural fold:', err);
+}
+const bird = new Bird({ feathers: true, debugSkeleton: false, featherGeometries, rig });
 scene.add(bird.group);
 
 // Airflow streaming over the wings (child of the bird, so it moves with it).
@@ -214,7 +223,7 @@ engine.loop.onFrame((dt) => {
   updraftVFX?.update(elapsed);
   googleTiles?.update();
   if (wingAirflow) {
-    const ext = 0.5 * (bird.leftWing.getExtension() + bird.rightWing.getExtension());
+    const ext = 0.5 * (bird.extL + bird.extR);
     // Visible from normal soaring speed (~8) and saturating in a fast dive (~18).
     const sp01 = THREE.MathUtils.clamp((flight.speed - 4) / 12, 0.12, 1);
     wingAirflow.update(elapsed, sp01, ext);

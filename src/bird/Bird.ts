@@ -24,14 +24,51 @@ export interface WingControls {
   alula: number;
 }
 
+/** Hand-animated fold clip (from hawk_rig.glb). */
+export interface RigInput {
+  scene: THREE.Object3D;
+  clip: THREE.AnimationClip;
+}
+
+/** One driven joint: a code WingRig joint tracks an imported (animated) bone. */
+interface FoldPair {
+  joint: THREE.Object3D;
+  bone: THREE.Object3D;
+  /** constant rest-frame correction: Jw_rest * Bw_rest^-1. */
+  corr: THREE.Quaternion;
+  side: 'L' | 'R';
+}
+
 export class Bird {
   readonly group = new THREE.Group();
   readonly leftWing = new WingRig('L');
   readonly rightWing = new WingRig('R');
   readonly tail = new TailFan();
   readonly body: THREE.Mesh;
+  /** last applied fold (1 spread .. 0 folded) per wing, for the HUD. */
+  extL = 1;
+  extR = 1;
   private leftFeathers?: FeatherSystem;
   private rightFeathers?: FeatherSystem;
+
+  // Animation-driven fold.
+  private mixer?: THREE.AnimationMixer;
+  private rigScene?: THREE.Object3D;
+  private clipDur = 0;
+  private foldPairs: FoldPair[] = [];
+  private get hasRig(): boolean {
+    return this.foldPairs.length > 0;
+  }
+  private readonly _qB = new THREE.Quaternion();
+  private readonly _qT = new THREE.Quaternion();
+  private readonly _qP = new THREE.Quaternion();
+  private readonly _qG = new THREE.Quaternion();
+
+  /** orientation of `obj` relative to bird.group (flight-independent). */
+  private relQ(obj: THREE.Object3D, out: THREE.Quaternion): THREE.Quaternion {
+    obj.getWorldQuaternion(out);
+    return out.premultiply(this._qG); // _qG holds group-world-inverse
+  }
 
   constructor(
     opts: {
@@ -39,6 +76,8 @@ export class Bird {
       feathers?: boolean;
       /** Optional real feather geometry per group (from hawk_feathers.glb). */
       featherGeometries?: Partial<Record<GroupKey, THREE.BufferGeometry>>;
+      /** Optional hand-animated fold rig (from hawk_rig.glb). */
+      rig?: RigInput;
     } = {},
   ) {
     this.body = new THREE.Mesh(
@@ -60,31 +99,96 @@ export class Bird {
       this.rightFeathers = new FeatherSystem(this.rightWing, { geometries: g });
     }
 
+    if (opts.rig) this.bindRig(opts.rig);
+
     if (opts.debugSkeleton) {
       addSkeletonDebug(this.leftWing);
       addSkeletonDebug(this.rightWing);
     }
   }
 
-  /** Apply full controls to one wing + its feathers. */
-  setWing(side: 'L' | 'R', c: WingControls): void {
-    const wing = side === 'L' ? this.leftWing : this.rightWing;
-    const fs = side === 'L' ? this.leftFeathers : this.rightFeathers;
-    wing.setPose(c.extension, c.aoaRad, c.dihedralRad);
-    fs?.update(c.extension, c.spread, c.alula);
+  /** Bind the hand-animated fold clip; each code joint will track an imported bone. */
+  private bindRig(rig: RigInput): void {
+    this.rigScene = rig.scene;
+    this.group.add(rig.scene);
+    rig.scene.traverse((o) => {
+      const m = o as THREE.Mesh;
+      if (m.isMesh) m.visible = false; // hide the imported body mesh; keep bones
+    });
+    this.mixer = new THREE.AnimationMixer(rig.scene);
+    const action = this.mixer.clipAction(rig.clip);
+    action.play(); // not paused — we scrub the pose with mixer.setTime each frame
+    this.clipDur = rig.clip.duration;
+
+    const map: Array<[THREE.Object3D, string, 'L' | 'R']> = [
+      [this.leftWing.shoulder, 'L_humerus', 'L'],
+      [this.leftWing.elbow, 'L_forearm', 'L'],
+      [this.leftWing.wrist, 'L_hand', 'L'],
+      [this.rightWing.shoulder, 'R_humerus', 'R'],
+      [this.rightWing.elbow, 'R_forearm', 'R'],
+      [this.rightWing.wrist, 'R_hand', 'R'],
+    ];
+    // Capture rest (spread) orientations relative to bird.group, build corrections.
+    this.mixer.setTime(0);
+    this.group.updateMatrixWorld(true);
+    this.group.getWorldQuaternion(this._qG).invert();
+    for (const [joint, boneName, side] of map) {
+      const bone = rig.scene.getObjectByName(boneName);
+      if (!bone) continue;
+      const bwRestInv = this.relQ(bone, new THREE.Quaternion()).invert();
+      const jwRest = this.relQ(joint, new THREE.Quaternion());
+      this.foldPairs.push({ joint, bone, corr: jwRest.multiply(bwRestInv), side });
+    }
   }
 
-  /** Average extension of both wings drives the tail fan. */
+  /** Fold each wing (1 spread .. 0 folded). Uses the clip if bound, else WingRig. */
+  setFold(extL: number, extR: number): void {
+    this.extL = THREE.MathUtils.clamp(extL, 0, 1);
+    this.extR = THREE.MathUtils.clamp(extR, 0, 1);
+    if (!this.hasRig || !this.mixer || !this.rigScene) {
+      this.leftWing.setExtension(this.extL);
+      this.rightWing.setExtension(this.extR);
+      return;
+    }
+    this.driveSide('L', this.extL);
+    this.driveSide('R', this.extR);
+  }
+
+  /** Sample the clip at one wing's fold time and make its joints track the bones. */
+  private driveSide(side: 'L' | 'R', ext: number): void {
+    // ext 1 -> t0 (spread); 0 -> end (folded). Stay just under duration so the
+    // looping clip doesn't wrap back to the spread keyframe at exactly t=dur.
+    this.mixer!.setTime(Math.min((1 - ext) * this.clipDur, this.clipDur * 0.999));
+    this.rigScene!.updateMatrixWorld(true);
+    this.group.getWorldQuaternion(this._qG).invert(); // group-world-inverse for relQ
+    for (const p of this.foldPairs) {
+      if (p.side !== side) continue;
+      // target (group-rel) = corr * bone(group-rel); convert to local under parent.
+      this.relQ(p.bone, this._qB);
+      this._qT.copy(p.corr).multiply(this._qB);
+      this.relQ(p.joint.parent!, this._qP).invert();
+      p.joint.quaternion.copy(this._qP).multiply(this._qT);
+      p.joint.updateMatrixWorld(true);
+    }
+  }
+
+  /** Per-wing feather fan (spread/alula) on top of the fold. */
+  updateFeathers(side: 'L' | 'R', ext: number, spread: number, alula: number): void {
+    const fs = side === 'L' ? this.leftFeathers : this.rightFeathers;
+    fs?.update(ext, spread, alula);
+  }
+
+  /** Average fold drives the tail fan. */
   updateTail(): void {
-    const e = 0.5 * (this.leftWing.getExtension() + this.rightWing.getExtension());
+    const e = 0.5 * (this.extL + this.extR);
     this.tail.setSpread(0.35 + 0.65 * e);
   }
 
-  /** Symmetric extension convenience (neutral aoa/dihedral) — used by fallbacks. */
+  /** Symmetric convenience — used by fallbacks. */
   setExtension(e: number): void {
-    const c: WingControls = { extension: e, aoaRad: 0, dihedralRad: 0, spread: 0.5, alula: 0 };
-    this.setWing('L', c);
-    this.setWing('R', c);
+    this.setFold(e, e);
+    this.updateFeathers('L', e, 0.5, 0);
+    this.updateFeathers('R', e, 0.5, 0);
     this.updateTail();
   }
 }

@@ -39,7 +39,11 @@ function mapHand(pose: HandPose): WingControls {
 }
 
 export function applyHandToWing(bird: Bird, hands: HandState): void {
-  bird.setWing('L', mapHand(hands.left));
-  bird.setWing('R', mapHand(hands.right));
+  const l = mapHand(hands.left);
+  const r = mapHand(hands.right);
+  // Fold is driven by the hand-animated clip (per wing); feather fan rides on top.
+  bird.setFold(l.extension, r.extension);
+  bird.updateFeathers('L', l.extension, l.spread, l.alula);
+  bird.updateFeathers('R', r.extension, r.spread, r.alula);
   bird.updateTail();
 }
