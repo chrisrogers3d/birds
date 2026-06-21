@@ -14,6 +14,8 @@ import { Hud } from './util/Hud';
 import { Bird } from './bird/Bird';
 import { loadFeatherGeometries } from './bird/loadFeatherGeometries';
 import { applyHandToWing } from './bird/HandToWing';
+import { loadBirdModel } from './bird/loadBirdModel';
+import { PoseRig } from './bird/PoseRig';
 import { FlightModel, type FlightInput } from './flight/FlightModel';
 import { FollowCamera } from './core/FollowCamera';
 import type { HandState } from './input/HandSource';
@@ -105,6 +107,26 @@ try {
 }
 const bird = new Bird({ feathers: true, debugSkeleton: false, featherGeometries, rig });
 scene.add(bird.group);
+
+// --- v2 probe: load the Maya WingCreator model + classify feathers ---
+try {
+  const model = await loadBirdModel('/models/wings1.fbx');
+  const poseRig = new PoseRig(model.root);
+  const box = new THREE.Box3().setFromObject(model.root);
+  const size = box.getSize(new THREE.Vector3());
+  // eslint-disable-next-line no-console
+  console.log('[birds][v2] PoseRig feathers:', poseRig.feathers.length, poseRig.summary());
+  // eslint-disable-next-line no-console
+  console.log('[birds][v2] clips:', model.animations.map((a) => `${a.name}(${a.duration.toFixed(2)}s)`));
+  // eslint-disable-next-line no-console
+  console.log('[birds][v2] model size (units):', size.toArray().map((n) => +n.toFixed(1)));
+  // Register the sample clip as a test pose (sampled at its end frame) to verify blending.
+  if (model.animations[0]) poseRig.addPose('test', model.animations[0], model.animations[0].duration);
+  (window as unknown as { poseRig: PoseRig }).poseRig = poseRig;
+  (window as unknown as { __clip: THREE.AnimationClip }).__clip = model.animations[0];
+} catch (err) {
+  console.error('[birds][v2] model load failed:', err);
+}
 
 // Airflow streaming over the wings (child of the bird, so it moves with it).
 const wingAirflow = settings.vfxDensity > 0 ? new WingAirflowVFX({ density: settings.vfxDensity }) : null;
