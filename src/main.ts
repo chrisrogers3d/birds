@@ -12,6 +12,7 @@ import type { HandSource } from './input/HandSource';
 import { TUNE } from './input/HandFeatures';
 import { Hud } from './util/Hud';
 import { Bird } from './bird/Bird';
+import { loadFeatherGeometries } from './bird/loadFeatherGeometries';
 import { applyHandToWing } from './bird/HandToWing';
 import { FlightModel, type FlightInput } from './flight/FlightModel';
 import { FollowCamera } from './core/FollowCamera';
@@ -79,8 +80,16 @@ if (new URLSearchParams(location.search).has('tiles') && tilesKey) {
   }
 }
 
-// --- Bird with the wing rig + procedural feathers ---
-const bird = new Bird({ feathers: true, debugSkeleton: false });
+// --- Bird with the wing rig + feathers ---
+// Use the authentic feather meshes (rebuilt from the .ma); fall back to the
+// procedural cards if the glb fails to load.
+let featherGeometries;
+try {
+  featherGeometries = await loadFeatherGeometries('/models/hawk_feathers.glb');
+} catch (err) {
+  console.warn('[birds] feather glb failed, using procedural cards:', err);
+}
+const bird = new Bird({ feathers: true, debugSkeleton: false, featherGeometries });
 scene.add(bird.group);
 
 // Airflow streaming over the wings (child of the bird, so it moves with it).

@@ -110,8 +110,10 @@ export class FeatherSystem {
       pivot.position.set(s * boneLen * u, cfg.layer, 0);
 
       const mesh = new THREE.Mesh(geometry, material);
-      // Card: quill at origin, vane down +Z. Scale length (Z) and width (X).
-      mesh.scale.set(sil.scaleWidth * length * 0.6, 1, sil.scaleLength * length);
+      // Quill at origin, vane +Z. Scale uniformly in-plane so the feather's
+      // natural width:length aspect is preserved (works for card or real mesh).
+      const L = sil.scaleLength * length;
+      mesh.scale.set(L * (0.85 + 0.3 * sil.scaleWidth), 1, L);
       pivot.add(mesh);
 
       parent.add(pivot);

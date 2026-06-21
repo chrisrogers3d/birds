@@ -8,6 +8,7 @@ import * as THREE from 'three';
 import { WingRig } from './WingRig';
 import { FeatherSystem } from './FeatherSystem';
 import { TailFan } from './TailFan';
+import type { GroupKey } from './featherShapes';
 
 /** Per-wing control inputs (from HandToWing). */
 export interface WingControls {
@@ -32,7 +33,14 @@ export class Bird {
   private leftFeathers?: FeatherSystem;
   private rightFeathers?: FeatherSystem;
 
-  constructor(opts: { debugSkeleton?: boolean; feathers?: boolean } = {}) {
+  constructor(
+    opts: {
+      debugSkeleton?: boolean;
+      feathers?: boolean;
+      /** Optional real feather geometry per group (from hawk_feathers.glb). */
+      featherGeometries?: Partial<Record<GroupKey, THREE.BufferGeometry>>;
+    } = {},
+  ) {
     this.body = new THREE.Mesh(
       new THREE.CapsuleGeometry(0.06, 0.34, 8, 16),
       new THREE.MeshStandardMaterial({ color: 0x1c1c20, roughness: 0.65 }),
@@ -47,8 +55,9 @@ export class Bird {
     this.group.add(this.tail.group);
 
     if (opts.feathers !== false) {
-      this.leftFeathers = new FeatherSystem(this.leftWing);
-      this.rightFeathers = new FeatherSystem(this.rightWing);
+      const g = opts.featherGeometries;
+      this.leftFeathers = new FeatherSystem(this.leftWing, { geometries: g });
+      this.rightFeathers = new FeatherSystem(this.rightWing, { geometries: g });
     }
 
     if (opts.debugSkeleton) {
